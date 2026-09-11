@@ -1,21 +1,65 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useOrderBuilder } from '../hooks/useOrderBuilder'
 import { useShareConfirm } from '../hooks/useShareConfirm'
 import { PackageIcon, TruckIcon, ShareIcon } from '../components/icons'
-import { PROVIDERS } from '../data/mockData'
+import type { Provider } from '../data/mockData'
+import { createOrder, getProviders, sendOrder } from '../api'
 
 export function DesktopApp() {
-  const [selectedProviderName, setSelectedProviderName] = useState(PROVIDERS[0].name)
+  const [providers, setProviders] = useState<Provider[]>([])
+  const [selectedProviderId, setSelectedProviderId] = useState<number | null>(null)
+  const [orderId, setOrderId] = useState<number | null>(null)
   const [deliveryDate, setDeliveryDate] = useState('2026-09-15')
   const [nextDeliveryDate, setNextDeliveryDate] = useState('2026-09-29')
 
-  const order = useOrderBuilder(selectedProviderName)
+  const order = useOrderBuilder(selectedProviderId)
   const share = useShareConfirm()
 
-  const selectProvider = (name: string) => {
-    setSelectedProviderName(name)
+  const loadProviders = () => {
+    getProviders().then((data) => {
+      setProviders(data)
+      setSelectedProviderId((current) => current ?? data[0]?.id ?? null)
+    })
+  }
+
+  useEffect(loadProviders, [])
+
+  const selectedProvider = providers.find((p) => p.id === selectedProviderId)
+
+  const selectProvider = (id: number) => {
+    setSelectedProviderId(id)
+    setOrderId(null)
     order.reset()
     share.reset()
+  }
+
+  const createDraftOrder = async () => {
+    if (selectedProviderId == null) return null
+    const created = await createOrder(selectedProviderId, {
+      deliveryDate,
+      nextDeliveryDate,
+      items: order.items.map((it) => ({ productId: it.id, finalQty: Number(it.finalQty || 0) })),
+    })
+    setOrderId(created.id)
+    return created.id
+  }
+
+  const shareActions = {
+    whatsapp: async () => {
+      const id = orderId ?? (await createDraftOrder())
+      share.shareWhatsapp()
+      if (id != null) sendOrder(id).then(loadProviders)
+    },
+    email: async () => {
+      const id = orderId ?? (await createDraftOrder())
+      share.shareEmail()
+      if (id != null) sendOrder(id).then(loadProviders)
+    },
+    pdf: async () => {
+      const id = orderId ?? (await createDraftOrder())
+      share.downloadPdf()
+      if (id != null) sendOrder(id).then(loadProviders)
+    },
   }
 
   return (
@@ -31,12 +75,12 @@ export function DesktopApp() {
         <div>
           <div className="mb-2 px-2 text-[11px] font-bold uppercase tracking-wide text-[var(--color-text-muted)]">Proveedores</div>
           <div className="flex flex-col gap-1">
-            {PROVIDERS.map((p) => {
-              const active = p.name === selectedProviderName
+            {providers.map((p) => {
+              const active = p.id === selectedProviderId
               return (
                 <button
-                  key={p.name}
-                  onClick={() => selectProvider(p.name)}
+                  key={p.id}
+                  onClick={() => selectProvider(p.id)}
                   className="flex items-center gap-2.5 rounded-[10px] px-2 py-2.5 text-left"
                   style={{ background: active ? '#f0effb' : 'transparent' }}
                 >
@@ -67,7 +111,7 @@ export function DesktopApp() {
       <div className="flex flex-1 flex-col gap-[22px] overflow-y-auto p-10">
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
-            <div className="text-[22px] font-extrabold text-[var(--color-text)]">{selectedProviderName}</div>
+            <div className="text-[22px] font-extrabold text-[var(--color-text)]">{selectedProvider?.name ?? ''}</div>
             <div className="mt-0.5 text-[13px] text-[var(--color-text-muted)]">Armado de pedido</div>
           </div>
           <div className="flex gap-3">
@@ -132,19 +176,19 @@ export function DesktopApp() {
           </div>
           <div className="flex gap-2.5">
             <button
-              onClick={share.downloadPdf}
+              onClick={shareActions.pdf}
               className="rounded-[11px] border border-[var(--color-border)] bg-white px-[18px] py-3 text-[13.5px] font-bold text-[var(--color-text)]"
             >
               Descargar PDF
             </button>
             <button
-              onClick={share.shareEmail}
+              onClick={shareActions.email}
               className="rounded-[11px] border border-[var(--color-border)] bg-white px-[18px] py-3 text-[13.5px] font-bold text-[var(--color-text)]"
             >
               Enviar por email
             </button>
             <button
-              onClick={share.shareWhatsapp}
+              onClick={shareActions.whatsapp}
               className="flex items-center gap-2 rounded-[11px] bg-[var(--color-accent)] px-5 py-3 text-[13.5px] font-bold text-white"
             >
               <ShareIcon size={16} />

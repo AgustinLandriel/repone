@@ -1,21 +1,34 @@
-import { PROVIDER_NAMES } from '../../data/mockData'
+import type { Provider } from '../../data/mockData'
 
 type Props = {
+  barcode: string
   name: string
   onNameChange: (v: string) => void
-  provider: string
-  onProviderChange: (v: string) => void
+  providers: Provider[]
+  providerId: number
+  onProviderIdChange: (v: number) => void
   purchase: string
   onPurchaseChange: (v: string) => void
   sale: string
   onSaleChange: (v: string) => void
 }
 
-export function NewProductScreen({ name, onNameChange, provider, onProviderChange, purchase, onPurchaseChange, sale, onSaleChange }: Props) {
+export function NewProductScreen({
+  barcode,
+  name,
+  onNameChange,
+  providers,
+  providerId,
+  onProviderIdChange,
+  purchase,
+  onPurchaseChange,
+  sale,
+  onSaleChange,
+}: Props) {
   return (
     <div className="flex flex-col gap-3.5">
       <div className="rounded-xl border border-[#f5ddb8] bg-[var(--color-warning-bg)] px-3 py-2.5 text-xs text-[var(--color-warning)]">
-        Código escaneado sin coincidencias: <span className="font-mono">7790000000029</span>
+        Código escaneado sin coincidencias: <span className="font-mono">{barcode}</span>
       </div>
 
       <label className="flex flex-col gap-1.5">
@@ -32,13 +45,13 @@ export function NewProductScreen({ name, onNameChange, provider, onProviderChang
       <label className="flex flex-col gap-1.5">
         <span className="text-xs font-bold text-[var(--color-text-secondary)]">Proveedor</span>
         <select
-          value={provider}
-          onChange={(e) => onProviderChange(e.target.value)}
+          value={providerId}
+          onChange={(e) => onProviderIdChange(Number(e.target.value))}
           className="rounded-[10px] border border-[var(--color-border)] bg-white px-3 py-[11px] text-sm text-[var(--color-text)]"
         >
-          {PROVIDER_NAMES.map((n) => (
-            <option key={n} value={n}>
-              {n}
+          {providers.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
             </option>
           ))}
         </select>

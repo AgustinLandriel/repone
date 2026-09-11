@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react'
-import { PROVIDER_ITEMS, fmtMoney } from '../data/mockData'
+import { useEffect, useMemo, useState } from 'react'
+import { getOrderItems } from '../api'
+import { fmtMoney, type OrderLineBase } from '../data/mockData'
 
 export type OrderLine = {
-  id: string
+  id: number
   name: string
   currentStock: number
   suggested: number
@@ -11,10 +12,23 @@ export type OrderLine = {
   setQty: (value: string) => void
 }
 
-export function useOrderBuilder(providerName: string) {
-  const [finalQtys, setFinalQtys] = useState<Record<string, string>>({})
+export function useOrderBuilder(providerId: number | null) {
+  const [base, setBase] = useState<OrderLineBase[]>([])
+  const [finalQtys, setFinalQtys] = useState<Record<number, string>>({})
 
-  const base = PROVIDER_ITEMS[providerName] || []
+  useEffect(() => {
+    if (providerId == null) {
+      setBase([])
+      return
+    }
+    let cancelled = false
+    getOrderItems(providerId).then((data) => {
+      if (!cancelled) setBase(data)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [providerId])
 
   const items: OrderLine[] = useMemo(
     () =>
@@ -31,8 +45,7 @@ export function useOrderBuilder(providerName: string) {
           setQty: (value: string) => setFinalQtys((prev) => ({ ...prev, [it.id]: value })),
         }
       }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [providerName, finalQtys],
+    [base, finalQtys],
   )
 
   const total = base.reduce((sum, it) => {

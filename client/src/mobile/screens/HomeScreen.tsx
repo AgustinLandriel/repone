@@ -4,7 +4,7 @@ import type { Provider } from '../../data/mockData'
 type Props = {
   providers: Provider[]
   onScan: () => void
-  onSelectProvider: (name: string) => void
+  onSelectProvider: (id: number) => void
 }
 
 export function HomeScreen({ providers, onScan, onSelectProvider }: Props) {
@@ -31,8 +31,8 @@ export function HomeScreen({ providers, onScan, onSelectProvider }: Props) {
         <div className="flex flex-col gap-2.5">
           {providers.map((p) => (
             <button
-              key={p.name}
-              onClick={() => onSelectProvider(p.name)}
+              key={p.id}
+              onClick={() => onSelectProvider(p.id)}
               className="flex items-center gap-3 rounded-[14px] border border-[var(--color-border)] bg-[var(--color-surface)] p-3.5 text-left"
             >
               <div className="flex h-[38px] w-[38px] flex-shrink-0 items-center justify-center rounded-[10px] bg-[#f0efea]">

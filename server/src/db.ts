@@ -10,23 +10,34 @@ db.exec('PRAGMA journal_mode = WAL')
 db.exec('PRAGMA foreign_keys = ON')
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS businesses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    invite_code TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS providers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    business_id INTEGER NOT NULL REFERENCES businesses(id),
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (business_id, name)
   );
 
   CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_id INTEGER NOT NULL REFERENCES businesses(id),
     name TEXT NOT NULL,
-    barcode TEXT NOT NULL UNIQUE,
+    barcode TEXT NOT NULL,
     provider_id INTEGER NOT NULL REFERENCES providers(id),
     purchase_price REAL NOT NULL DEFAULT 0,
     sale_price REAL NOT NULL DEFAULT 0,
     current_stock INTEGER NOT NULL DEFAULT 0,
     reorder_point INTEGER NOT NULL DEFAULT 10,
     last_stock_at TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (business_id, barcode)
   );
 
   CREATE TABLE IF NOT EXISTS orders (
@@ -51,6 +62,7 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_id INTEGER NOT NULL REFERENCES businesses(id),
     email TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'owner' CHECK (role IN ('owner', 'employee')),

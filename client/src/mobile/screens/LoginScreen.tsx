@@ -1,15 +1,22 @@
 import { useState } from 'react'
 import { GoogleIcon, PackageIcon } from '../../components/icons'
-import { login, register, type AuthUser, type Role } from '../../api'
+import { joinBusiness, login, registerBusiness, type AuthUser } from '../../api'
 
-type EmailMode = 'login' | 'register'
+type EmailMode = 'login' | 'register-business' | 'join'
+
+const TABS: { mode: EmailMode; label: string }[] = [
+  { mode: 'login', label: 'Iniciar sesión' },
+  { mode: 'register-business', label: 'Nuevo comercio' },
+  { mode: 'join', label: 'Ya tengo un código' },
+]
 
 export function LoginScreen({ onLogin }: { onLogin: (user: AuthUser) => void }) {
   const [showEmailForm, setShowEmailForm] = useState(false)
   const [emailMode, setEmailMode] = useState<EmailMode>('login')
+  const [businessName, setBusinessName] = useState('')
+  const [inviteCode, setInviteCode] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [role, setRole] = useState<Role>('owner')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -18,7 +25,12 @@ export function LoginScreen({ onLogin }: { onLogin: (user: AuthUser) => void }) 
     setError('')
     setSubmitting(true)
     try {
-      const user = emailMode === 'login' ? await login(email, password) : await register(email, password, role)
+      const user =
+        emailMode === 'login'
+          ? await login(email, password)
+          : emailMode === 'register-business'
+            ? await registerBusiness(businessName, email, password)
+            : await joinBusiness(inviteCode, email, password)
       onLogin(user)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo completar la operación')
@@ -59,23 +71,46 @@ export function LoginScreen({ onLogin }: { onLogin: (user: AuthUser) => void }) 
         {showEmailForm && (
           <form onSubmit={submit} className="flex flex-col gap-3 rounded-2xl bg-white p-4">
             <div className="flex gap-1 rounded-lg bg-[var(--color-bg)] p-1">
-              <button
-                type="button"
-                onClick={() => setEmailMode('login')}
-                className="flex-1 rounded-md py-1.5 text-[12.5px] font-bold"
-                style={emailMode === 'login' ? { background: 'white', color: 'var(--color-text)' } : { color: 'var(--color-text-muted)' }}
-              >
-                Iniciar sesión
-              </button>
-              <button
-                type="button"
-                onClick={() => setEmailMode('register')}
-                className="flex-1 rounded-md py-1.5 text-[12.5px] font-bold"
-                style={emailMode === 'register' ? { background: 'white', color: 'var(--color-text)' } : { color: 'var(--color-text-muted)' }}
-              >
-                Crear cuenta
-              </button>
+              {TABS.map((tab) => (
+                <button
+                  key={tab.mode}
+                  type="button"
+                  onClick={() => setEmailMode(tab.mode)}
+                  className="flex-1 rounded-md py-1.5 text-[11.5px] font-bold"
+                  style={emailMode === tab.mode ? { background: 'white', color: 'var(--color-text)' } : { color: 'var(--color-text-muted)' }}
+                >
+                  {tab.label}
+                </button>
+              ))}
             </div>
+
+            {emailMode === 'register-business' && (
+              <label className="flex flex-col gap-1.5 text-left">
+                <span className="text-[11.5px] font-bold text-[var(--color-text-secondary)]">Nombre del comercio</span>
+                <input
+                  type="text"
+                  required
+                  value={businessName}
+                  onChange={(e) => setBusinessName(e.target.value)}
+                  placeholder="Ej: Almacén Don José"
+                  className="rounded-lg border border-[var(--color-border)] px-3 py-2.5 text-sm text-[var(--color-text)]"
+                />
+              </label>
+            )}
+
+            {emailMode === 'join' && (
+              <label className="flex flex-col gap-1.5 text-left">
+                <span className="text-[11.5px] font-bold text-[var(--color-text-secondary)]">Código de invitación</span>
+                <input
+                  type="text"
+                  required
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value)}
+                  placeholder="Te lo pasa el dueño/encargado"
+                  className="rounded-lg border border-[var(--color-border)] px-3 py-2.5 text-sm uppercase text-[var(--color-text)]"
+                />
+              </label>
+            )}
 
             <label className="flex flex-col gap-1.5 text-left">
               <span className="text-[11.5px] font-bold text-[var(--color-text-secondary)]">Email</span>
@@ -102,24 +137,10 @@ export function LoginScreen({ onLogin }: { onLogin: (user: AuthUser) => void }) 
               />
             </label>
 
-            {emailMode === 'register' && (
-              <label className="flex flex-col gap-1.5 text-left">
-                <span className="text-[11.5px] font-bold text-[var(--color-text-secondary)]">Rol</span>
-                <select
-                  value={role}
-                  onChange={(e) => setRole(e.target.value as Role)}
-                  className="rounded-lg border border-[var(--color-border)] bg-white px-3 py-2.5 text-sm text-[var(--color-text)]"
-                >
-                  <option value="owner">Dueño / encargado</option>
-                  <option value="employee">Empleado</option>
-                </select>
-              </label>
-            )}
-
             {error && <div className="text-[12px] font-semibold text-red-600">{error}</div>}
 
             <button type="submit" disabled={submitting} className="mt-1 w-full rounded-lg bg-[var(--color-accent)] py-2.5 text-sm font-bold text-white disabled:opacity-60">
-              {submitting ? 'Un momento…' : emailMode === 'login' ? 'Iniciar sesión' : 'Crear cuenta'}
+              {submitting ? 'Un momento…' : emailMode === 'login' ? 'Iniciar sesión' : emailMode === 'register-business' ? 'Crear comercio' : 'Sumarme al comercio'}
             </button>
 
             <button type="button" onClick={() => setShowEmailForm(false)} className="text-[12px] font-semibold text-[var(--color-text-muted)]">

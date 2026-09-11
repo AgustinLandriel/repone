@@ -3,7 +3,7 @@ import { useOrderBuilder } from '../hooks/useOrderBuilder'
 import { useShareConfirm } from '../hooks/useShareConfirm'
 import { LogoutIcon, PackageIcon, TruckIcon, ShareIcon } from '../components/icons'
 import type { Provider } from '../data/mockData'
-import { createOrder, getProviders, sendOrder, type AuthUser } from '../api'
+import { createOrder, createProvider, getProviders, sendOrder, type AuthUser } from '../api'
 
 const ROLE_LABEL: Record<AuthUser['role'], string> = {
   owner: 'Dueño / encargado',
@@ -25,12 +25,27 @@ export function DesktopApp({ user, onLogout }: Props) {
   const order = useOrderBuilder(selectedProviderId)
   const share = useShareConfirm()
   const [error, setError] = useState('')
+  const [addingProvider, setAddingProvider] = useState(false)
+  const [newProviderName, setNewProviderName] = useState('')
 
   const loadProviders = () => {
     getProviders().then((data) => {
       setProviders(data)
       setSelectedProviderId((current) => current ?? data[0]?.id ?? null)
     })
+  }
+
+  const submitNewProvider = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newProviderName.trim()) return
+    try {
+      await createProvider(newProviderName.trim())
+      setNewProviderName('')
+      setAddingProvider(false)
+      loadProviders()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo crear el proveedor')
+    }
   }
 
   useEffect(loadProviders, [])
@@ -143,6 +158,41 @@ export function DesktopApp({ user, onLogout }: Props) {
               )
             })}
           </div>
+
+          {user.role === 'owner' &&
+            (addingProvider ? (
+              <form onSubmit={submitNewProvider} className="mt-2 flex flex-col gap-1.5 px-2">
+                <input
+                  autoFocus
+                  value={newProviderName}
+                  onChange={(e) => setNewProviderName(e.target.value)}
+                  placeholder="Nombre del proveedor"
+                  className="rounded-[9px] border border-[var(--color-border)] px-2.5 py-2 text-[12.5px] text-[var(--color-text)]"
+                />
+                <div className="flex gap-1.5">
+                  <button type="submit" className="flex-1 rounded-[9px] bg-[var(--color-accent)] py-1.5 text-[11.5px] font-bold text-white">
+                    Crear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddingProvider(false)
+                      setNewProviderName('')
+                    }}
+                    className="flex-1 rounded-[9px] border border-[var(--color-border)] py-1.5 text-[11.5px] font-bold text-[var(--color-text-secondary)]"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <button
+                onClick={() => setAddingProvider(true)}
+                className="mt-2 flex items-center justify-center gap-1.5 rounded-[10px] border border-dashed border-[var(--color-border)] px-2 py-2.5 text-[12px] font-bold text-[var(--color-text-secondary)]"
+              >
+                <span className="leading-none">+</span> Nuevo proveedor
+              </button>
+            ))}
         </div>
 
         <div className="mt-auto flex items-center gap-2.5 border-t border-[var(--color-border)] px-2 pt-4">

@@ -3,9 +3,6 @@ import { fmtDate, type CurrentProduct, type OrderLineBase, type Provider } from 
 const BASE = '/api'
 const TOKEN_KEY = 'repone_token'
 
-export const DEMO_EXISTING_BARCODE = '7790895000012' // Coca-Cola 500ml (Distribuidora Sur)
-export const DEMO_NEW_BARCODE = '7790000000029'
-
 export function getToken(): string | null {
   try {
     return localStorage.getItem(TOKEN_KEY)
@@ -120,21 +117,57 @@ export function sendOrder(orderId: number): Promise<{ id: number; status: string
   return apiJson(`/orders/${orderId}`, { method: 'PATCH', body: JSON.stringify({ status: 'sent' }) })
 }
 
+export function createProvider(name: string): Promise<Provider> {
+  return apiJson('/providers', { method: 'POST', body: JSON.stringify({ name }) })
+}
+
 export type Role = 'owner' | 'employee'
-export type AuthUser = { id: number; email: string; role: Role }
+export type AuthUser = {
+  id: number
+  email: string
+  role: Role
+  businessId: number
+  businessName: string
+  inviteCode: string
+}
 
-async function saveSession(res: Promise<{ token: string; user: AuthUser }>): Promise<AuthUser> {
-  const { token, user } = await res
+type SessionResponse = {
+  token: string
+  user: { id: number; email: string; role: Role }
+  business: { id: number; name: string; inviteCode: string }
+}
+
+function saveSession({ token, user, business }: SessionResponse): AuthUser {
   setToken(token)
-  return user
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    businessId: business.id,
+    businessName: business.name,
+    inviteCode: business.inviteCode,
+  }
 }
 
-export function register(email: string, password: string, role: Role): Promise<AuthUser> {
-  return saveSession(apiJson('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, role }) }))
+export async function registerBusiness(businessName: string, email: string, password: string): Promise<AuthUser> {
+  const res = await apiJson<SessionResponse>('/auth/register-business', {
+    method: 'POST',
+    body: JSON.stringify({ businessName, email, password }),
+  })
+  return saveSession(res)
 }
 
-export function login(email: string, password: string): Promise<AuthUser> {
-  return saveSession(apiJson('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }))
+export async function joinBusiness(inviteCode: string, email: string, password: string): Promise<AuthUser> {
+  const res = await apiJson<SessionResponse>('/auth/join', {
+    method: 'POST',
+    body: JSON.stringify({ inviteCode, email, password }),
+  })
+  return saveSession(res)
+}
+
+export async function login(email: string, password: string): Promise<AuthUser> {
+  const res = await apiJson<SessionResponse>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
+  return saveSession(res)
 }
 
 export async function getCurrentUser(): Promise<AuthUser | null> {
@@ -144,8 +177,15 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     clearToken()
     return null
   }
-  const { user } = await res.json()
-  return user
+  const { user, business } = await res.json()
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    businessId: business.id,
+    businessName: business.name,
+    inviteCode: business.inviteCode,
+  }
 }
 
 export async function logout(): Promise<void> {

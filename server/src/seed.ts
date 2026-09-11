@@ -1,4 +1,5 @@
 import { db } from './db.js'
+import { hashPassword } from './lib/password.js'
 
 type SeedProduct = {
   name: string
@@ -8,6 +9,11 @@ type SeedProduct = {
   currentStock: number
   reorderPoint: number
 }
+
+const DEMO_BUSINESS_NAME = 'Comercio Demo'
+const DEMO_INVITE_CODE = 'DEMO0001'
+const DEMO_EMAIL = 'demo@repone.test'
+const DEMO_PASSWORD = 'demo1234'
 
 const SEED: Record<string, SeedProduct[]> = {
   'Distribuidora Sur': [
@@ -26,23 +32,32 @@ const SEED: Record<string, SeedProduct[]> = {
   ],
 }
 
-const insertProvider = db.prepare('INSERT OR IGNORE INTO providers (name) VALUES (?)')
-const getProviderId = db.prepare('SELECT id FROM providers WHERE name = ?')
+const insertBusiness = db.prepare('INSERT OR IGNORE INTO businesses (name, invite_code) VALUES (?, ?)')
+const getBusinessId = db.prepare('SELECT id FROM businesses WHERE invite_code = ?')
+const insertUser = db.prepare('INSERT OR IGNORE INTO users (business_id, email, password_hash, role) VALUES (?, ?, ?, ?)')
+const insertProvider = db.prepare('INSERT OR IGNORE INTO providers (business_id, name) VALUES (?, ?)')
+const getProviderId = db.prepare('SELECT id FROM providers WHERE business_id = ? AND name = ?')
 const insertProduct = db.prepare(`
   INSERT OR IGNORE INTO products
-    (name, barcode, provider_id, purchase_price, sale_price, current_stock, reorder_point, last_stock_at)
-  VALUES (@name, @barcode, @providerId, @purchase, @sale, @currentStock, @reorderPoint, datetime('now'))
+    (business_id, name, barcode, provider_id, purchase_price, sale_price, current_stock, reorder_point, last_stock_at)
+  VALUES (@businessId, @name, @barcode, @providerId, @purchase, @sale, @currentStock, @reorderPoint, datetime('now'))
 `)
 
 function seed() {
   db.exec('BEGIN')
   try {
+    insertBusiness.run(DEMO_BUSINESS_NAME, DEMO_INVITE_CODE)
+    const businessId = (getBusinessId.get(DEMO_INVITE_CODE) as { id: number }).id
+
+    insertUser.run(businessId, DEMO_EMAIL, hashPassword(DEMO_PASSWORD), 'owner')
+
     for (const [providerName, products] of Object.entries(SEED)) {
-      insertProvider.run(providerName)
-      const providerId = (getProviderId.get(providerName) as { id: number }).id
+      insertProvider.run(businessId, providerName)
+      const providerId = (getProviderId.get(businessId, providerName) as { id: number }).id
 
       for (const p of products) {
         insertProduct.run({
+          businessId,
           name: p.name,
           barcode: p.barcode,
           providerId,
@@ -61,4 +76,4 @@ function seed() {
 }
 
 seed()
-console.log('Seed completo.')
+console.log(`Seed completo. Comercio demo: ${DEMO_EMAIL} / ${DEMO_PASSWORD} (código de invitación: ${DEMO_INVITE_CODE})`)

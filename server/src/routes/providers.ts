@@ -2,10 +2,11 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { db } from '../db.js'
 import { parseBody } from '../lib/http.js'
+import { requireRole } from '../lib/auth.js'
 
 export const providersRouter = Router()
 
-providersRouter.get('/', (_req, res) => {
+providersRouter.get('/', (req, res) => {
   const rows = db
     .prepare(
       `SELECT
@@ -14,9 +15,10 @@ providersRouter.get('/', (_req, res) => {
         (SELECT COUNT(*) FROM products pr WHERE pr.provider_id = p.id) AS productCount,
         (SELECT o.status FROM orders o WHERE o.provider_id = p.id ORDER BY o.created_at DESC, o.id DESC LIMIT 1) AS latestStatus
       FROM providers p
+      WHERE p.business_id = ?
       ORDER BY p.id`,
     )
-    .all() as { id: number; name: string; productCount: number; latestStatus: string | null }[]
+    .all(req.user!.businessId) as { id: number; name: string; productCount: number; latestStatus: string | null }[]
 
   res.json(
     rows.map((r) => ({
@@ -28,9 +30,24 @@ providersRouter.get('/', (_req, res) => {
   )
 })
 
+const createProviderSchema = z.object({
+  name: z.string().min(1),
+})
+
+providersRouter.post('/', requireRole('owner'), (req, res) => {
+  const body = parseBody(createProviderSchema, req, res)
+  if (!body) return
+
+  const existing = db.prepare('SELECT id FROM providers WHERE business_id = ? AND name = ?').get(req.user!.businessId, body.name)
+  if (existing) return res.status(409).json({ error: 'Ya existe un proveedor con ese nombre' })
+
+  const info = db.prepare('INSERT INTO providers (business_id, name) VALUES (?, ?)').run(req.user!.businessId, body.name)
+  res.status(201).json({ id: Number(info.lastInsertRowid), name: body.name, productCount: 0, pending: false })
+})
+
 providersRouter.get('/:id/order-items', (req, res) => {
   const providerId = Number(req.params.id)
-  const provider = db.prepare('SELECT id FROM providers WHERE id = ?').get(providerId)
+  const provider = db.prepare('SELECT id FROM providers WHERE id = ? AND business_id = ?').get(providerId, req.user!.businessId)
   if (!provider) return res.status(404).json({ error: 'Proveedor no encontrado' })
 
   const products = db
@@ -66,7 +83,7 @@ const createOrderSchema = z.object({
 
 providersRouter.post('/:id/orders', (req, res) => {
   const providerId = Number(req.params.id)
-  const provider = db.prepare('SELECT id FROM providers WHERE id = ?').get(providerId)
+  const provider = db.prepare('SELECT id FROM providers WHERE id = ? AND business_id = ?').get(providerId, req.user!.businessId)
   if (!provider) return res.status(404).json({ error: 'Proveedor no encontrado' })
 
   const body = parseBody(createOrderSchema, req, res)

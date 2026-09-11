@@ -5,9 +5,11 @@ type Props = {
   providers: Provider[]
   onScan: () => void
   onSelectProvider: (id: number) => void
+  canAddProvider: boolean
+  onAddProvider: () => void
 }
 
-export function HomeScreen({ providers, onScan, onSelectProvider }: Props) {
+export function HomeScreen({ providers, onScan, onSelectProvider, canAddProvider, onAddProvider }: Props) {
   return (
     <div className="flex flex-col gap-[22px]">
       <button
@@ -54,6 +56,14 @@ export function HomeScreen({ providers, onScan, onSelectProvider }: Props) {
               </div>
             </button>
           ))}
+          {canAddProvider && (
+            <button
+              onClick={onAddProvider}
+              className="flex items-center justify-center gap-2 rounded-[14px] border border-dashed border-[var(--color-border)] p-3.5 text-[13px] font-bold text-[var(--color-text-secondary)]"
+            >
+              <span className="text-base leading-none">+</span> Agregar proveedor
+            </button>
+          )}
         </div>
       </div>
     </div>

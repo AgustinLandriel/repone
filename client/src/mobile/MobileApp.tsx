@@ -1,24 +1,36 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { useOrderBuilder } from '../hooks/useOrderBuilder'
 import { useShareConfirm } from '../hooks/useShareConfirm'
 import { ChevronLeftIcon, PackageIcon, UserIcon } from '../components/icons'
 import type { CurrentProduct, Provider } from '../data/mockData'
-import { type AuthUser, createOrder, createProduct, getProductByBarcode, getProviders, sendOrder, updateStock } from '../api'
+import {
+  type AuthUser,
+  createOrder,
+  createProduct,
+  createProvider,
+  getProductByBarcode,
+  getProviders,
+  sendOrder,
+  updateStock,
+} from '../api'
 import { HomeScreen } from './screens/HomeScreen'
-import { ScanScreen } from './screens/ScanScreen'
 import { FichaScreen } from './screens/FichaScreen'
 import { NewProductScreen } from './screens/NewProductScreen'
+import { NewProviderScreen } from './screens/NewProviderScreen'
 import { OrderScreen } from './screens/OrderScreen'
 import { SummaryScreen } from './screens/SummaryScreen'
 import { AccountScreen } from './screens/AccountScreen'
 
-type Screen = 'home' | 'scan' | 'ficha' | 'newProduct' | 'order' | 'summary' | 'account'
+const ScanScreen = lazy(() => import('./screens/ScanScreen').then((m) => ({ default: m.ScanScreen })))
+
+type Screen = 'home' | 'scan' | 'ficha' | 'newProduct' | 'newProvider' | 'order' | 'summary' | 'account'
 
 const TITLES: Record<Screen, string> = {
   home: 'Reponé',
   scan: 'Escanear producto',
   ficha: 'Producto',
   newProduct: 'Alta de producto',
+  newProvider: 'Nuevo proveedor',
   order: 'Pedido',
   summary: 'Resumen de pedido',
   account: 'Mi cuenta',
@@ -39,6 +51,7 @@ export function MobileApp({ user, onLogout }: Props) {
   const [newProviderId, setNewProviderId] = useState<number | null>(null)
   const [newPurchase, setNewPurchase] = useState('')
   const [newSale, setNewSale] = useState('')
+  const [newProviderName, setNewProviderName] = useState('')
   const [selectedProviderId, setSelectedProviderId] = useState<number | null>(null)
   const [orderId, setOrderId] = useState<number | null>(null)
   const [deliveryDate, setDeliveryDate] = useState('2026-09-15')
@@ -74,9 +87,12 @@ export function MobileApp({ user, onLogout }: Props) {
         setCurrentProduct(product)
         setStockCount('0')
         setScreen('ficha')
-      } else {
+      } else if (user.role === 'owner') {
         setScannedBarcode(barcode)
         setScreen('newProduct')
+      } else {
+        setToastMsg('Producto no encontrado. Pedile a un dueño/encargado que lo dé de alta.')
+        setScreen('home')
       }
     } catch (err) {
       setToastMsg(err instanceof Error ? err.message : 'No se pudo buscar el producto')
@@ -127,6 +143,20 @@ export function MobileApp({ user, onLogout }: Props) {
     loadProviders()
   }
 
+  const saveProvider = async () => {
+    if (!newProviderName.trim()) return
+    try {
+      await createProvider(newProviderName.trim())
+    } catch (err) {
+      setToastMsg(err instanceof Error ? err.message : 'No se pudo crear el proveedor')
+      return
+    }
+    setNewProviderName('')
+    setToastMsg('Proveedor creado')
+    setScreen('home')
+    loadProviders()
+  }
+
   const goToSummary = async () => {
     if (selectedProviderId == null) return
     let created: { id: number }
@@ -173,9 +203,7 @@ export function MobileApp({ user, onLogout }: Props) {
           ? 'home'
           : screen === 'summary'
             ? 'order'
-            : screen === 'account'
-              ? 'home'
-              : 'home'
+            : 'home'
 
   const title = screen === 'ficha' ? (currentProduct?.isNew ? 'Producto nuevo' : 'Producto') : screen === 'order' ? `Pedido: ${selectedProvider?.name ?? ''}` : TITLES[screen]
 
@@ -218,8 +246,20 @@ export function MobileApp({ user, onLogout }: Props) {
       )}
 
       <div className="flex-1 overflow-y-auto px-5 pb-6 pt-[18px]">
-        {screen === 'home' && <HomeScreen providers={providers} onScan={() => setScreen('scan')} onSelectProvider={selectProvider} />}
-        {screen === 'scan' && <ScanScreen onDetected={handleDetected} />}
+        {screen === 'home' && (
+          <HomeScreen
+            providers={providers}
+            onScan={() => setScreen('scan')}
+            onSelectProvider={selectProvider}
+            canAddProvider={user.role === 'owner'}
+            onAddProvider={() => setScreen('newProvider')}
+          />
+        )}
+        {screen === 'scan' && (
+          <Suspense fallback={<div className="text-center text-[12.5px] text-[var(--color-text-secondary)]">Cargando cámara…</div>}>
+            <ScanScreen onDetected={handleDetected} />
+          </Suspense>
+        )}
         {screen === 'ficha' && (
           <FichaScreen product={currentProduct} stockCount={stockCount} onStockCountChange={setStockCount} />
         )}
@@ -256,6 +296,7 @@ export function MobileApp({ user, onLogout }: Props) {
             shareMessage={share.message}
           />
         )}
+        {screen === 'newProvider' && <NewProviderScreen name={newProviderName} onNameChange={setNewProviderName} />}
         {screen === 'account' && <AccountScreen user={user} onLogout={onLogout} />}
       </div>
 
@@ -270,6 +311,13 @@ export function MobileApp({ user, onLogout }: Props) {
         <div className="flex-shrink-0 border-t border-[var(--color-border)] bg-[var(--color-surface)] px-5 pb-[22px] pt-3.5">
           <button onClick={continueNewProduct} className="w-full rounded-xl bg-[var(--color-accent)] py-3.5 text-[14.5px] font-bold text-white">
             Continuar
+          </button>
+        </div>
+      )}
+      {screen === 'newProvider' && (
+        <div className="flex-shrink-0 border-t border-[var(--color-border)] bg-[var(--color-surface)] px-5 pb-[22px] pt-3.5">
+          <button onClick={saveProvider} className="w-full rounded-xl bg-[var(--color-accent)] py-3.5 text-[14.5px] font-bold text-white">
+            Crear proveedor
           </button>
         </div>
       )}

@@ -1,0 +1,29 @@
+import type { NextFunction, Request, Response } from 'express'
+import { db } from '../db.js'
+
+export type SessionUser = { id: number; email: string; role: 'owner' | 'employee' }
+
+declare module 'express-serve-static-core' {
+  interface Request {
+    user?: SessionUser
+  }
+}
+
+export function bearerToken(req: Request): string | undefined {
+  const header = req.headers.authorization
+  return header?.startsWith('Bearer ') ? header.slice(7) : undefined
+}
+
+export function findSessionUser(token: string): SessionUser | undefined {
+  return db
+    .prepare('SELECT u.id AS id, u.email AS email, u.role AS role FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?')
+    .get(token) as SessionUser | undefined
+}
+
+export function requireAuth(req: Request, res: Response, next: NextFunction) {
+  const token = bearerToken(req)
+  const user = token ? findSessionUser(token) : undefined
+  if (!user) return res.status(401).json({ error: 'No autenticado' })
+  req.user = user
+  next()
+}

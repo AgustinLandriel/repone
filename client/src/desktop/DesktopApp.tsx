@@ -1,11 +1,21 @@
 import { useEffect, useState } from 'react'
 import { useOrderBuilder } from '../hooks/useOrderBuilder'
 import { useShareConfirm } from '../hooks/useShareConfirm'
-import { PackageIcon, TruckIcon, ShareIcon } from '../components/icons'
+import { LogoutIcon, PackageIcon, TruckIcon, ShareIcon } from '../components/icons'
 import type { Provider } from '../data/mockData'
-import { createOrder, getProviders, sendOrder } from '../api'
+import { createOrder, getProviders, sendOrder, type AuthUser } from '../api'
 
-export function DesktopApp() {
+const ROLE_LABEL: Record<AuthUser['role'], string> = {
+  owner: 'Dueño / encargado',
+  employee: 'Empleado',
+}
+
+type Props = {
+  user: AuthUser
+  onLogout: () => void
+}
+
+export function DesktopApp({ user, onLogout }: Props) {
   const [providers, setProviders] = useState<Provider[]>([])
   const [selectedProviderId, setSelectedProviderId] = useState<number | null>(null)
   const [orderId, setOrderId] = useState<number | null>(null)
@@ -133,6 +143,20 @@ export function DesktopApp() {
               )
             })}
           </div>
+        </div>
+
+        <div className="mt-auto flex items-center gap-2.5 border-t border-[var(--color-border)] px-2 pt-4">
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[12.5px] font-bold text-[var(--color-text)]">{user.email}</div>
+            <div className="text-[11px] text-[var(--color-text-muted)]">{ROLE_LABEL[user.role]}</div>
+          </div>
+          <button
+            onClick={onLogout}
+            title="Cerrar sesión"
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[9px] border border-[var(--color-border)] text-[var(--color-text-secondary)]"
+          >
+            <LogoutIcon size={15} />
+          </button>
         </div>
       </div>
 

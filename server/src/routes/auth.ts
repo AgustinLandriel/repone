@@ -4,13 +4,9 @@ import { z } from 'zod'
 import { db } from '../db.js'
 import { parseBody } from '../lib/http.js'
 import { hashPassword, verifyPassword } from '../lib/password.js'
+import { bearerToken, findSessionUser } from '../lib/auth.js'
 
 export const authRouter = Router()
-
-function bearerToken(req: import('express').Request): string | undefined {
-  const header = req.headers.authorization
-  return header?.startsWith('Bearer ') ? header.slice(7) : undefined
-}
 
 function createSession(userId: number): string {
   const token = randomBytes(32).toString('hex')
@@ -64,14 +60,9 @@ authRouter.post('/login', (req, res) => {
 
 authRouter.get('/me', (req, res) => {
   const token = bearerToken(req)
-  if (!token) return res.status(401).json({ error: 'No autenticado' })
-
-  const row = db
-    .prepare('SELECT u.id AS id, u.email AS email, u.role AS role FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?')
-    .get(token)
-
-  if (!row) return res.status(401).json({ error: 'Sesión inválida' })
-  res.json({ user: row })
+  const user = token ? findSessionUser(token) : undefined
+  if (!user) return res.status(401).json({ error: 'Sesión inválida' })
+  res.json({ user })
 })
 
 authRouter.post('/logout', (req, res) => {

@@ -3,18 +3,7 @@ import { useOrderBuilder } from '../hooks/useOrderBuilder'
 import { useShareConfirm } from '../hooks/useShareConfirm'
 import { ChevronLeftIcon, PackageIcon, UserIcon } from '../components/icons'
 import type { CurrentProduct, Provider } from '../data/mockData'
-import {
-  type AuthUser,
-  createOrder,
-  createProduct,
-  getCurrentUser,
-  getProductByBarcode,
-  getProviders,
-  logout,
-  sendOrder,
-  updateStock,
-} from '../api'
-import { LoginScreen } from './screens/LoginScreen'
+import { type AuthUser, createOrder, createProduct, getProductByBarcode, getProviders, sendOrder, updateStock } from '../api'
 import { HomeScreen } from './screens/HomeScreen'
 import { ScanScreen } from './screens/ScanScreen'
 import { FichaScreen } from './screens/FichaScreen'
@@ -23,10 +12,9 @@ import { OrderScreen } from './screens/OrderScreen'
 import { SummaryScreen } from './screens/SummaryScreen'
 import { AccountScreen } from './screens/AccountScreen'
 
-type Screen = 'login' | 'home' | 'scan' | 'ficha' | 'newProduct' | 'order' | 'summary' | 'account'
+type Screen = 'home' | 'scan' | 'ficha' | 'newProduct' | 'order' | 'summary' | 'account'
 
 const TITLES: Record<Screen, string> = {
-  login: '',
   home: 'Reponé',
   scan: 'Escanear producto',
   ficha: 'Producto',
@@ -36,10 +24,13 @@ const TITLES: Record<Screen, string> = {
   account: 'Mi cuenta',
 }
 
-export function MobileApp() {
-  const [screen, setScreen] = useState<Screen>('login')
-  const [checkingSession, setCheckingSession] = useState(true)
-  const [user, setUser] = useState<AuthUser | null>(null)
+type Props = {
+  user: AuthUser
+  onLogout: () => void
+}
+
+export function MobileApp({ user, onLogout }: Props) {
+  const [screen, setScreen] = useState<Screen>('home')
   const [providers, setProviders] = useState<Provider[]>([])
   const [stockCount, setStockCount] = useState('0')
   const [currentProduct, setCurrentProduct] = useState<CurrentProduct | null>(null)
@@ -64,31 +55,9 @@ export function MobileApp() {
     })
   }
 
-  useEffect(() => {
-    getCurrentUser()
-      .then((restored) => {
-        if (restored) {
-          setUser(restored)
-          setScreen('home')
-        }
-      })
-      .finally(() => setCheckingSession(false))
-  }, [])
-
   useEffect(loadProviders, [])
 
   const selectedProvider = providers.find((p) => p.id === selectedProviderId)
-
-  const handleLogin = (loggedUser: AuthUser) => {
-    setUser(loggedUser)
-    setScreen('home')
-  }
-
-  const handleLogout = async () => {
-    await logout()
-    setUser(null)
-    setScreen('login')
-  }
 
   const selectProvider = (id: number) => {
     setSelectedProviderId(id)
@@ -210,14 +179,6 @@ export function MobileApp() {
 
   const title = screen === 'ficha' ? (currentProduct?.isNew ? 'Producto nuevo' : 'Producto') : screen === 'order' ? `Pedido: ${selectedProvider?.name ?? ''}` : TITLES[screen]
 
-  if (checkingSession) {
-    return <div className="h-full w-full bg-[#111214]" />
-  }
-
-  if (screen === 'login' || !user) {
-    return <LoginScreen onLogin={handleLogin} />
-  }
-
   const showBack = screen !== 'home'
 
   return (
@@ -295,7 +256,7 @@ export function MobileApp() {
             shareMessage={share.message}
           />
         )}
-        {screen === 'account' && <AccountScreen user={user} onLogout={handleLogout} />}
+        {screen === 'account' && <AccountScreen user={user} onLogout={onLogout} />}
       </div>
 
       {screen === 'ficha' && (

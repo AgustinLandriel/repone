@@ -15,6 +15,7 @@ export type OrderLine = {
 export function useOrderBuilder(providerId: number | null) {
   const [base, setBase] = useState<OrderLineBase[]>([])
   const [finalQtys, setFinalQtys] = useState<Record<number, string>>({})
+  const [reloadTick, setReloadTick] = useState(0)
 
   useEffect(() => {
     if (providerId == null) {
@@ -28,7 +29,9 @@ export function useOrderBuilder(providerId: number | null) {
     return () => {
       cancelled = true
     }
-  }, [providerId])
+  }, [providerId, reloadTick])
+
+  const refresh = () => setReloadTick((t) => t + 1)
 
   const items: OrderLine[] = useMemo(
     () =>
@@ -55,5 +58,5 @@ export function useOrderBuilder(providerId: number | null) {
 
   const reset = () => setFinalQtys({})
 
-  return { items, totalLabel: fmtMoney(total), reset }
+  return { items, totalLabel: fmtMoney(total), reset, refresh }
 }

@@ -3,7 +3,7 @@ import { useOrderBuilder } from '../hooks/useOrderBuilder'
 import { useShareConfirm } from '../hooks/useShareConfirm'
 import { LogoutIcon, PackageIcon, TruckIcon, ShareIcon } from '../components/icons'
 import type { Provider } from '../data/mockData'
-import { createOrder, createProvider, getProviders, sendOrder, type AuthUser } from '../api'
+import { createOrder, createProduct, createProvider, getProviders, sendOrder, updateStock, type AuthUser } from '../api'
 
 const ROLE_LABEL: Record<AuthUser['role'], string> = {
   owner: 'Dueño / encargado',
@@ -27,6 +27,9 @@ export function DesktopApp({ user, onLogout }: Props) {
   const [error, setError] = useState('')
   const [addingProvider, setAddingProvider] = useState(false)
   const [newProviderName, setNewProviderName] = useState('')
+  const [stockEdits, setStockEdits] = useState<Record<number, string>>({})
+  const [addingProduct, setAddingProduct] = useState(false)
+  const [newProduct, setNewProduct] = useState({ name: '', barcode: '', purchase: '', sale: '', initialStock: '' })
 
   const loadProviders = () => {
     getProviders().then((data) => {
@@ -57,6 +60,51 @@ export function DesktopApp({ user, onLogout }: Props) {
     setOrderId(null)
     order.reset()
     share.reset()
+    setAddingProduct(false)
+  }
+
+  const commitStockEdit = async (productId: number, currentValue: number) => {
+    const edited = stockEdits[productId]
+    if (edited === undefined) return
+    const stock = Number(edited || 0)
+    setStockEdits((prev) => {
+      const next = { ...prev }
+      delete next[productId]
+      return next
+    })
+    if (stock === currentValue) return
+    try {
+      await updateStock(productId, stock)
+      order.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo actualizar el stock')
+    }
+  }
+
+  const submitNewProduct = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (selectedProviderId == null) return
+    if (!newProduct.name.trim() || !newProduct.barcode.trim()) {
+      setError('Completá nombre y código de barras para crear el producto')
+      return
+    }
+    setError('')
+    try {
+      await createProduct({
+        name: newProduct.name.trim(),
+        barcode: newProduct.barcode.trim(),
+        providerId: selectedProviderId,
+        purchase: Number(newProduct.purchase || 0),
+        sale: Number(newProduct.sale || 0),
+        initialStock: Number(newProduct.initialStock || 0),
+      })
+      setNewProduct({ name: '', barcode: '', purchase: '', sale: '', initialStock: '' })
+      setAddingProduct(false)
+      order.refresh()
+      loadProviders()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo crear el producto')
+    }
   }
 
   const createDraftOrder = async (): Promise<number | null> => {
@@ -164,6 +212,7 @@ export function DesktopApp({ user, onLogout }: Props) {
               <form onSubmit={submitNewProvider} className="mt-2 flex flex-col gap-1.5 px-2">
                 <input
                   autoFocus
+                  required
                   value={newProviderName}
                   onChange={(e) => setNewProviderName(e.target.value)}
                   placeholder="Nombre del proveedor"
@@ -195,18 +244,26 @@ export function DesktopApp({ user, onLogout }: Props) {
             ))}
         </div>
 
-        <div className="mt-auto flex items-center gap-2.5 border-t border-[var(--color-border)] px-2 pt-4">
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-[12.5px] font-bold text-[var(--color-text)]">{user.email}</div>
-            <div className="text-[11px] text-[var(--color-text-muted)]">{ROLE_LABEL[user.role]}</div>
+        <div className="mt-auto flex flex-col gap-3 border-t border-[var(--color-border)] px-2 pt-4">
+          <div className="flex items-center gap-2.5">
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[12.5px] font-bold text-[var(--color-text)]">{user.businessName}</div>
+              <div className="truncate text-[11px] text-[var(--color-text-muted)]">
+                {user.email} · {ROLE_LABEL[user.role]}
+              </div>
+            </div>
+            <button
+              onClick={onLogout}
+              title="Cerrar sesión"
+              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[9px] border border-[var(--color-border)] text-[var(--color-text-secondary)]"
+            >
+              <LogoutIcon size={15} />
+            </button>
           </div>
-          <button
-            onClick={onLogout}
-            title="Cerrar sesión"
-            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[9px] border border-[var(--color-border)] text-[var(--color-text-secondary)]"
-          >
-            <LogoutIcon size={15} />
-          </button>
+          <div className="flex items-center justify-between rounded-[9px] bg-[var(--color-bg)] px-2.5 py-2">
+            <span className="text-[10.5px] font-bold uppercase tracking-wide text-[var(--color-text-muted)]">Código de invitación</span>
+            <span className="font-mono text-[12px] font-bold text-[var(--color-text)]">{user.inviteCode}</span>
+          </div>
         </div>
       </div>
 
@@ -238,6 +295,81 @@ export function DesktopApp({ user, onLogout }: Props) {
           </div>
         </div>
 
+        {user.role === 'owner' && selectedProviderId != null && (
+          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+            {addingProduct ? (
+              <form onSubmit={submitNewProduct} className="flex flex-col gap-2.5">
+                {error && <div className="text-[12px] font-semibold text-red-600">{error}</div>}
+                <div className="flex flex-wrap items-end gap-2.5">
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] font-bold text-[var(--color-text-secondary)]">Nombre</span>
+                  <input
+                    autoFocus
+                    required
+                    value={newProduct.name}
+                    onChange={(e) => setNewProduct((p) => ({ ...p, name: e.target.value }))}
+                    className="w-40 rounded-[9px] border border-[var(--color-border)] px-2.5 py-2 text-[12.5px] text-[var(--color-text)]"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] font-bold text-[var(--color-text-secondary)]">Código de barras</span>
+                  <input
+                    required
+                    value={newProduct.barcode}
+                    onChange={(e) => setNewProduct((p) => ({ ...p, barcode: e.target.value }))}
+                    className="w-32 rounded-[9px] border border-[var(--color-border)] px-2.5 py-2 text-[12.5px] text-[var(--color-text)]"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] font-bold text-[var(--color-text-secondary)]">Precio compra</span>
+                  <input
+                    type="number"
+                    value={newProduct.purchase}
+                    onChange={(e) => setNewProduct((p) => ({ ...p, purchase: e.target.value }))}
+                    className="w-24 rounded-[9px] border border-[var(--color-border)] px-2.5 py-2 text-[12.5px] text-[var(--color-text)]"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] font-bold text-[var(--color-text-secondary)]">Precio venta</span>
+                  <input
+                    type="number"
+                    value={newProduct.sale}
+                    onChange={(e) => setNewProduct((p) => ({ ...p, sale: e.target.value }))}
+                    className="w-24 rounded-[9px] border border-[var(--color-border)] px-2.5 py-2 text-[12.5px] text-[var(--color-text)]"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] font-bold text-[var(--color-text-secondary)]">Stock inicial</span>
+                  <input
+                    type="number"
+                    value={newProduct.initialStock}
+                    onChange={(e) => setNewProduct((p) => ({ ...p, initialStock: e.target.value }))}
+                    className="w-20 rounded-[9px] border border-[var(--color-border)] px-2.5 py-2 text-[12.5px] text-[var(--color-text)]"
+                  />
+                </label>
+                <button type="submit" className="rounded-[9px] bg-[var(--color-accent)] px-4 py-2 text-[12.5px] font-bold text-white">
+                  Crear
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAddingProduct(false)}
+                  className="rounded-[9px] border border-[var(--color-border)] px-4 py-2 text-[12.5px] font-bold text-[var(--color-text-secondary)]"
+                >
+                  Cancelar
+                </button>
+                </div>
+              </form>
+            ) : (
+              <button
+                onClick={() => setAddingProduct(true)}
+                className="flex items-center gap-1.5 text-[12.5px] font-bold text-[var(--color-accent)]"
+              >
+                <span className="leading-none">+</span> Agregar producto a {selectedProvider?.name}
+              </button>
+            )}
+          </div>
+        )}
+
         <div className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]">
           <div className="grid grid-cols-[2.4fr_1fr_1fr_1fr_1fr] gap-0 border-b border-[var(--color-border)] bg-[var(--color-bg)] px-5 py-3">
             <div className="text-[11px] font-bold uppercase tracking-wide text-[var(--color-text-muted)]">Producto</div>
@@ -249,7 +381,16 @@ export function DesktopApp({ user, onLogout }: Props) {
           {order.items.map((item) => (
             <div key={item.id} className="grid grid-cols-[2.4fr_1fr_1fr_1fr_1fr] items-center gap-0 border-b border-[#f2f1ec] px-5 py-3.5 last:border-b-0">
               <div className="text-[13.5px] font-semibold text-[var(--color-text)]">{item.name}</div>
-              <div className="text-right text-[13px] text-[var(--color-text-secondary)]">{item.currentStock}</div>
+              <div className="text-right">
+                <input
+                  type="number"
+                  value={stockEdits[item.id] ?? String(item.currentStock)}
+                  onChange={(e) => setStockEdits((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                  onBlur={() => commitStockEdit(item.id, item.currentStock)}
+                  title="Corregir stock actual"
+                  className="w-16 rounded-lg border border-transparent bg-transparent p-1.5 text-right text-[13px] text-[var(--color-text-secondary)] hover:border-[var(--color-border)] focus:border-[var(--color-border)] focus:bg-white"
+                />
+              </div>
               <div className="text-right text-[13px] text-[var(--color-text-secondary)]">{item.suggested}</div>
               <div className="text-right">
                 <input

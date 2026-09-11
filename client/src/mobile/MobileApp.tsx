@@ -144,7 +144,10 @@ export function MobileApp({ user, onLogout }: Props) {
   }
 
   const saveProvider = async () => {
-    if (!newProviderName.trim()) return
+    if (!newProviderName.trim()) {
+      setToastMsg('Ingresá un nombre para el proveedor')
+      return
+    }
     try {
       await createProvider(newProviderName.trim())
     } catch (err) {

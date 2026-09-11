@@ -1,13 +1,42 @@
 import { fmtDate, type CurrentProduct, type OrderLineBase, type Provider } from './data/mockData'
 
 const BASE = '/api'
+const TOKEN_KEY = 'repone_token'
 
 export const DEMO_EXISTING_BARCODE = '7790895000012' // Coca-Cola 500ml (Distribuidora Sur)
 export const DEMO_NEW_BARCODE = '7790000000029'
 
+export function getToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY)
+  } catch {
+    return null
+  }
+}
+
+function setToken(token: string) {
+  try {
+    localStorage.setItem(TOKEN_KEY, token)
+  } catch {
+    // localStorage no disponible (modo privado, etc.) — la sesión no persiste al recargar
+  }
+}
+
+function clearToken() {
+  try {
+    localStorage.removeItem(TOKEN_KEY)
+  } catch {
+    // ver comentario en setToken
+  }
+}
+
 async function apiFetch(path: string, options?: RequestInit): Promise<Response> {
+  const token = getToken()
   return fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     ...options,
   })
 }
@@ -89,4 +118,37 @@ export function createOrder(providerId: number, input: CreateOrderInput): Promis
 
 export function sendOrder(orderId: number): Promise<{ id: number; status: string }> {
   return apiJson(`/orders/${orderId}`, { method: 'PATCH', body: JSON.stringify({ status: 'sent' }) })
+}
+
+export type Role = 'owner' | 'employee'
+export type AuthUser = { id: number; email: string; role: Role }
+
+async function saveSession(res: Promise<{ token: string; user: AuthUser }>): Promise<AuthUser> {
+  const { token, user } = await res
+  setToken(token)
+  return user
+}
+
+export function register(email: string, password: string, role: Role): Promise<AuthUser> {
+  return saveSession(apiJson('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, role }) }))
+}
+
+export function login(email: string, password: string): Promise<AuthUser> {
+  return saveSession(apiJson('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }))
+}
+
+export async function getCurrentUser(): Promise<AuthUser | null> {
+  if (!getToken()) return null
+  const res = await apiFetch('/auth/me')
+  if (!res.ok) {
+    clearToken()
+    return null
+  }
+  const { user } = await res.json()
+  return user
+}
+
+export async function logout(): Promise<void> {
+  await apiFetch('/auth/logout', { method: 'POST' })
+  clearToken()
 }

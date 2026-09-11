@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useOrderBuilder } from '../hooks/useOrderBuilder'
 import { useShareConfirm } from '../hooks/useShareConfirm'
-import { ChevronLeftIcon, PackageIcon } from '../components/icons'
+import { ChevronLeftIcon, PackageIcon, UserIcon } from '../components/icons'
 import type { CurrentProduct, Provider } from '../data/mockData'
 import {
-  DEMO_EXISTING_BARCODE,
-  DEMO_NEW_BARCODE,
+  type AuthUser,
   createOrder,
   createProduct,
+  getCurrentUser,
   getProductByBarcode,
   getProviders,
+  logout,
   sendOrder,
   updateStock,
 } from '../api'
@@ -20,8 +21,9 @@ import { FichaScreen } from './screens/FichaScreen'
 import { NewProductScreen } from './screens/NewProductScreen'
 import { OrderScreen } from './screens/OrderScreen'
 import { SummaryScreen } from './screens/SummaryScreen'
+import { AccountScreen } from './screens/AccountScreen'
 
-type Screen = 'login' | 'home' | 'scan' | 'ficha' | 'newProduct' | 'order' | 'summary'
+type Screen = 'login' | 'home' | 'scan' | 'ficha' | 'newProduct' | 'order' | 'summary' | 'account'
 
 const TITLES: Record<Screen, string> = {
   login: '',
@@ -31,12 +33,14 @@ const TITLES: Record<Screen, string> = {
   newProduct: 'Alta de producto',
   order: 'Pedido',
   summary: 'Resumen de pedido',
+  account: 'Mi cuenta',
 }
 
 export function MobileApp() {
   const [screen, setScreen] = useState<Screen>('login')
+  const [checkingSession, setCheckingSession] = useState(true)
+  const [user, setUser] = useState<AuthUser | null>(null)
   const [providers, setProviders] = useState<Provider[]>([])
-  const [scanMode, setScanMode] = useState<'existing' | 'new'>('existing')
   const [stockCount, setStockCount] = useState('0')
   const [currentProduct, setCurrentProduct] = useState<CurrentProduct | null>(null)
   const [scannedBarcode, setScannedBarcode] = useState('')
@@ -60,9 +64,31 @@ export function MobileApp() {
     })
   }
 
+  useEffect(() => {
+    getCurrentUser()
+      .then((restored) => {
+        if (restored) {
+          setUser(restored)
+          setScreen('home')
+        }
+      })
+      .finally(() => setCheckingSession(false))
+  }, [])
+
   useEffect(loadProviders, [])
 
   const selectedProvider = providers.find((p) => p.id === selectedProviderId)
+
+  const handleLogin = (loggedUser: AuthUser) => {
+    setUser(loggedUser)
+    setScreen('home')
+  }
+
+  const handleLogout = async () => {
+    await logout()
+    setUser(null)
+    setScreen('login')
+  }
 
   const selectProvider = (id: number) => {
     setSelectedProviderId(id)
@@ -72,16 +98,19 @@ export function MobileApp() {
     setScreen('order')
   }
 
-  const simulateScan = async () => {
-    const barcode = scanMode === 'existing' ? DEMO_EXISTING_BARCODE : DEMO_NEW_BARCODE
-    const product = await getProductByBarcode(barcode)
-    if (product) {
-      setCurrentProduct(product)
-      setStockCount('0')
-      setScreen('ficha')
-    } else {
-      setScannedBarcode(barcode)
-      setScreen('newProduct')
+  const handleDetected = async (barcode: string) => {
+    try {
+      const product = await getProductByBarcode(barcode)
+      if (product) {
+        setCurrentProduct(product)
+        setStockCount('0')
+        setScreen('ficha')
+      } else {
+        setScannedBarcode(barcode)
+        setScreen('newProduct')
+      }
+    } catch (err) {
+      setToastMsg(err instanceof Error ? err.message : 'No se pudo buscar el producto')
     }
   }
 
@@ -102,17 +131,22 @@ export function MobileApp() {
     if (!currentProduct) return
     const stock = Number(stockCount || 0)
 
-    if (currentProduct.isNew && newProviderId != null) {
-      await createProduct({
-        name: currentProduct.name,
-        barcode: currentProduct.barcode,
-        providerId: newProviderId,
-        purchase: currentProduct.purchase,
-        sale: currentProduct.sale,
-        initialStock: stock,
-      })
-    } else if (currentProduct.id != null) {
-      await updateStock(currentProduct.id, stock)
+    try {
+      if (currentProduct.isNew && newProviderId != null) {
+        await createProduct({
+          name: currentProduct.name,
+          barcode: currentProduct.barcode,
+          providerId: newProviderId,
+          purchase: currentProduct.purchase,
+          sale: currentProduct.sale,
+          initialStock: stock,
+        })
+      } else if (currentProduct.id != null) {
+        await updateStock(currentProduct.id, stock)
+      }
+    } catch (err) {
+      setToastMsg(err instanceof Error ? err.message : 'No se pudo guardar')
+      return
     }
 
     setToastMsg(currentProduct.isNew ? 'Producto y stock guardados' : 'Stock actualizado')
@@ -126,11 +160,17 @@ export function MobileApp() {
 
   const goToSummary = async () => {
     if (selectedProviderId == null) return
-    const created = await createOrder(selectedProviderId, {
-      deliveryDate,
-      nextDeliveryDate,
-      items: order.items.map((it) => ({ productId: it.id, finalQty: Number(it.finalQty || 0) })),
-    })
+    let created: { id: number }
+    try {
+      created = await createOrder(selectedProviderId, {
+        deliveryDate,
+        nextDeliveryDate,
+        items: order.items.map((it) => ({ productId: it.id, finalQty: Number(it.finalQty || 0) })),
+      })
+    } catch (err) {
+      setToastMsg(err instanceof Error ? err.message : 'No se pudo crear el pedido')
+      return
+    }
     setOrderId(created.id)
     share.reset()
     setScreen('summary')
@@ -138,16 +178,44 @@ export function MobileApp() {
 
   const markOrderSent = () => {
     if (orderId == null) return
-    sendOrder(orderId).then(loadProviders)
+    sendOrder(orderId)
+      .then(loadProviders)
+      .catch(() => {
+        // el pedido ya estaba marcado como enviado (p.ej. se tocó más de un botón de compartir)
+      })
+  }
+
+  const shareContext = {
+    providerName: selectedProvider?.name ?? '',
+    deliveryDate,
+    nextDeliveryDate,
+    items: order.items,
+    totalLabel: order.totalLabel,
   }
 
   const backTarget: Screen =
-    screen === 'ficha' ? (currentProduct?.isNew ? 'newProduct' : 'scan') : screen === 'newProduct' ? 'scan' : screen === 'order' ? 'home' : screen === 'summary' ? 'order' : 'home'
+    screen === 'ficha'
+      ? currentProduct?.isNew
+        ? 'newProduct'
+        : 'scan'
+      : screen === 'newProduct'
+        ? 'scan'
+        : screen === 'order'
+          ? 'home'
+          : screen === 'summary'
+            ? 'order'
+            : screen === 'account'
+              ? 'home'
+              : 'home'
 
   const title = screen === 'ficha' ? (currentProduct?.isNew ? 'Producto nuevo' : 'Producto') : screen === 'order' ? `Pedido: ${selectedProvider?.name ?? ''}` : TITLES[screen]
 
-  if (screen === 'login') {
-    return <LoginScreen onLogin={() => setScreen('home')} />
+  if (checkingSession) {
+    return <div className="h-full w-full bg-[#111214]" />
+  }
+
+  if (screen === 'login' || !user) {
+    return <LoginScreen onLogin={handleLogin} />
   }
 
   const showBack = screen !== 'home'
@@ -168,7 +236,15 @@ export function MobileApp() {
             <PackageIcon size={16} className="text-white" />
           </div>
         )}
-        <div className="text-[16.5px] font-bold text-[var(--color-text)]">{title}</div>
+        <div className="flex-1 text-[16.5px] font-bold text-[var(--color-text)]">{title}</div>
+        {screen === 'home' && (
+          <button
+            onClick={() => setScreen('account')}
+            className="flex h-8 w-8 items-center justify-center rounded-[9px] border border-[var(--color-border)] bg-[var(--color-surface)]"
+          >
+            <UserIcon size={16} />
+          </button>
+        )}
       </div>
 
       {toastMsg && (
@@ -182,7 +258,7 @@ export function MobileApp() {
 
       <div className="flex-1 overflow-y-auto px-5 pb-6 pt-[18px]">
         {screen === 'home' && <HomeScreen providers={providers} onScan={() => setScreen('scan')} onSelectProvider={selectProvider} />}
-        {screen === 'scan' && <ScanScreen scanMode={scanMode} onSetScanMode={setScanMode} />}
+        {screen === 'scan' && <ScanScreen onDetected={handleDetected} />}
         {screen === 'ficha' && (
           <FichaScreen product={currentProduct} stockCount={stockCount} onStockCountChange={setStockCount} />
         )}
@@ -219,15 +295,9 @@ export function MobileApp() {
             shareMessage={share.message}
           />
         )}
+        {screen === 'account' && <AccountScreen user={user} onLogout={handleLogout} />}
       </div>
 
-      {screen === 'scan' && (
-        <div className="flex-shrink-0 border-t border-[var(--color-border)] bg-[var(--color-surface)] px-5 pb-[22px] pt-3.5">
-          <button onClick={simulateScan} className="w-full rounded-xl bg-[var(--color-accent)] py-3.5 text-[14.5px] font-bold text-white">
-            Simular escaneo
-          </button>
-        </div>
-      )}
       {screen === 'ficha' && (
         <div className="flex-shrink-0 border-t border-[var(--color-border)] bg-[var(--color-surface)] px-5 pb-[22px] pt-3.5">
           <button onClick={saveStock} className="w-full rounded-xl bg-[var(--color-accent)] py-3.5 text-[14.5px] font-bold text-white">
@@ -253,7 +323,7 @@ export function MobileApp() {
         <div className="flex flex-shrink-0 flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)] px-5 pb-[22px] pt-3.5">
           <button
             onClick={() => {
-              share.shareWhatsapp()
+              share.shareWhatsapp(shareContext)
               markOrderSent()
             }}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-accent)] py-[13px] text-sm font-bold text-white"
@@ -263,7 +333,7 @@ export function MobileApp() {
           <div className="flex gap-2">
             <button
               onClick={() => {
-                share.shareEmail()
+                share.shareEmail(shareContext)
                 markOrderSent()
               }}
               className="flex-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] py-[11px] text-[13px] font-bold text-[var(--color-text)]"
@@ -272,7 +342,7 @@ export function MobileApp() {
             </button>
             <button
               onClick={() => {
-                share.downloadPdf()
+                share.downloadPdf(shareContext)
                 markOrderSent()
               }}
               className="flex-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] py-[11px] text-[13px] font-bold text-[var(--color-text)]"

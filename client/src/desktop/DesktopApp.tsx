@@ -14,6 +14,7 @@ export function DesktopApp() {
 
   const order = useOrderBuilder(selectedProviderId)
   const share = useShareConfirm()
+  const [error, setError] = useState('')
 
   const loadProviders = () => {
     getProviders().then((data) => {
@@ -33,32 +34,59 @@ export function DesktopApp() {
     share.reset()
   }
 
-  const createDraftOrder = async () => {
+  const createDraftOrder = async (): Promise<number | null> => {
     if (selectedProviderId == null) return null
-    const created = await createOrder(selectedProviderId, {
-      deliveryDate,
-      nextDeliveryDate,
-      items: order.items.map((it) => ({ productId: it.id, finalQty: Number(it.finalQty || 0) })),
-    })
-    setOrderId(created.id)
-    return created.id
+    try {
+      const created = await createOrder(selectedProviderId, {
+        deliveryDate,
+        nextDeliveryDate,
+        items: order.items.map((it) => ({ productId: it.id, finalQty: Number(it.finalQty || 0) })),
+      })
+      setOrderId(created.id)
+      return created.id
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo crear el pedido')
+      return null
+    }
+  }
+
+  const shareContext = {
+    providerName: selectedProvider?.name ?? '',
+    deliveryDate,
+    nextDeliveryDate,
+    items: order.items,
+    totalLabel: order.totalLabel,
+  }
+
+  const markOrderSent = (id: number) => {
+    sendOrder(id)
+      .then(loadProviders)
+      .catch(() => {
+        // el pedido ya estaba marcado como enviado (p.ej. se tocó más de un botón de compartir)
+      })
   }
 
   const shareActions = {
     whatsapp: async () => {
+      setError('')
       const id = orderId ?? (await createDraftOrder())
-      share.shareWhatsapp()
-      if (id != null) sendOrder(id).then(loadProviders)
+      if (id == null) return
+      share.shareWhatsapp(shareContext)
+      markOrderSent(id)
     },
     email: async () => {
+      setError('')
       const id = orderId ?? (await createDraftOrder())
-      share.shareEmail()
-      if (id != null) sendOrder(id).then(loadProviders)
+      if (id == null) return
+      share.shareEmail(shareContext)
+      markOrderSent(id)
     },
     pdf: async () => {
+      setError('')
       const id = orderId ?? (await createDraftOrder())
-      share.downloadPdf()
-      if (id != null) sendOrder(id).then(loadProviders)
+      if (id == null) return
+      share.downloadPdf(shareContext)
+      markOrderSent(id)
     },
   }
 
@@ -173,6 +201,7 @@ export function DesktopApp() {
             <div className="text-[11.5px] text-[var(--color-text-muted)]">Total estimado</div>
             <div className="text-[22px] font-extrabold text-[var(--color-accent)]">{order.totalLabel}</div>
             {share.message && <div className="mt-2 text-xs font-semibold text-[var(--color-success)]">{share.message}</div>}
+            {error && <div className="mt-2 text-xs font-semibold text-red-600">{error}</div>}
           </div>
           <div className="flex gap-2.5">
             <button

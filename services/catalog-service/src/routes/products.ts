@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { db } from '../db.js'
 import { parseBody } from '../lib/http.js'
-import { requireRole } from '../lib/auth.js'
+import { requireRole } from '../lib/verifyJwt.js'
 
 export const productsRouter = Router()
 

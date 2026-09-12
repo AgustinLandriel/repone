@@ -4,15 +4,9 @@ import { z } from 'zod'
 import { db } from '../db.js'
 import { parseBody } from '../lib/http.js'
 import { hashPassword, verifyPassword } from '../lib/password.js'
-import { bearerToken, findSessionUser } from '../lib/auth.js'
+import { signToken, verifyToken, bearerToken } from '../lib/jwt.js'
 
 export const authRouter = Router()
-
-function createSession(userId: number): string {
-  const token = randomBytes(32).toString('hex')
-  db.prepare('INSERT INTO sessions (token, user_id) VALUES (?, ?)').run(token, userId)
-  return token
-}
 
 function generateInviteCode(): string {
   const exists = db.prepare('SELECT 1 FROM businesses WHERE invite_code = ?')
@@ -23,14 +17,40 @@ function generateInviteCode(): string {
   return code
 }
 
-function sessionResponse(userId: number) {
-  const token = createSession(userId)
-  // el usuario recién creado ya tiene sesión y fila en users/businesses, así que esto siempre encuentra algo
-  const full = findSessionUser(token)!
+type UserRow = {
+  id: number
+  email: string
+  role: 'owner' | 'employee'
+  businessId: number
+  businessName: string
+  inviteCode: string
+}
+
+function loadUser(userId: number): UserRow {
+  return db
+    .prepare(
+      `SELECT u.id AS id, u.email AS email, u.role AS role,
+              b.id AS businessId, b.name AS businessName, b.invite_code AS inviteCode
+       FROM users u JOIN businesses b ON b.id = u.business_id
+       WHERE u.id = ?`,
+    )
+    .get(userId) as UserRow
+}
+
+function tokenResponse(userId: number) {
+  const u = loadUser(userId)
+  const token = signToken({
+    sub: u.id,
+    email: u.email,
+    role: u.role,
+    businessId: u.businessId,
+    businessName: u.businessName,
+    inviteCode: u.inviteCode,
+  })
   return {
     token,
-    user: { id: full.id, email: full.email, role: full.role },
-    business: { id: full.businessId, name: full.businessName, inviteCode: full.inviteCode },
+    user: { id: u.id, email: u.email, role: u.role },
+    business: { id: u.businessId, name: u.businessName, inviteCode: u.inviteCode },
   }
 }
 
@@ -57,7 +77,7 @@ authRouter.post('/register-business', (req, res) => {
       .run(businessId, body.email, hashPassword(body.password), 'owner').lastInsertRowid,
   )
 
-  res.status(201).json(sessionResponse(userId))
+  res.status(201).json(tokenResponse(userId))
 })
 
 const joinSchema = z.object({
@@ -84,7 +104,7 @@ authRouter.post('/join', (req, res) => {
       .run(business.id, body.email, hashPassword(body.password), 'employee').lastInsertRowid,
   )
 
-  res.status(201).json(sessionResponse(userId))
+  res.status(201).json(tokenResponse(userId))
 })
 
 const loginSchema = z.object({
@@ -104,22 +124,21 @@ authRouter.post('/login', (req, res) => {
     return res.status(401).json({ error: 'Email o contraseña incorrectos' })
   }
 
-  res.json(sessionResponse(user.id))
+  res.json(tokenResponse(user.id))
 })
 
 authRouter.get('/me', (req, res) => {
   const token = bearerToken(req)
-  const full = token ? findSessionUser(token) : undefined
-  if (!full) return res.status(401).json({ error: 'Sesión inválida' })
+  const payload = token ? verifyToken(token) : undefined
+  if (!payload) return res.status(401).json({ error: 'Sesión inválida' })
 
   res.json({
-    user: { id: full.id, email: full.email, role: full.role },
-    business: { id: full.businessId, name: full.businessName, inviteCode: full.inviteCode },
+    user: { id: payload.sub, email: payload.email, role: payload.role },
+    business: { id: payload.businessId, name: payload.businessName, inviteCode: payload.inviteCode },
   })
 })
 
-authRouter.post('/logout', (req, res) => {
-  const token = bearerToken(req)
-  if (token) db.prepare('DELETE FROM sessions WHERE token = ?').run(token)
+authRouter.post('/logout', (_req, res) => {
+  // Sin estado server-side (JWT): el cliente borra el token y listo, ver nota en lib/jwt.ts
   res.status(204).end()
 })

@@ -9,7 +9,9 @@ export default defineConfig({
     // permite acceder desde el túnel de Cloudflare (host distinto a localhost) durante desarrollo
     allowedHosts: true,
     proxy: {
-      '/api': 'http://localhost:3001',
+      '/api/auth': 'http://localhost:3001',
+      '/api/catalog': 'http://localhost:3002',
+      '/api/orders': 'http://localhost:3003',
     },
   },
 })

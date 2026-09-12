@@ -47,12 +47,21 @@ async function apiJson<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json()
 }
 
-export function getProviders(): Promise<Provider[]> {
-  return apiJson('/providers')
+type ProviderDTO = { id: number; name: string; productCount: number }
+
+// providers vive en catalog-service, pero el flag "pending" (último pedido sin
+// enviar) vive en orders-service — se componen acá porque ningún servicio tiene
+// acceso directo a la DB del otro (ver project_repone_microservices_migration).
+export async function getProviders(): Promise<Provider[]> {
+  const [providers, pendingByProvider] = await Promise.all([
+    apiJson<ProviderDTO[]>('/catalog/providers'),
+    apiJson<Record<number, boolean>>('/orders/status-by-provider'),
+  ])
+  return providers.map((p) => ({ ...p, pending: pendingByProvider[p.id] ?? false }))
 }
 
 export function getOrderItems(providerId: number): Promise<OrderLineBase[]> {
-  return apiJson(`/providers/${providerId}/order-items`)
+  return apiJson(`/catalog/providers/${providerId}/order-items`)
 }
 
 type ProductByBarcodeDTO = {
@@ -69,7 +78,7 @@ type ProductByBarcodeDTO = {
 }
 
 export async function getProductByBarcode(barcode: string): Promise<CurrentProduct | null> {
-  const res = await apiFetch(`/products/by-barcode/${encodeURIComponent(barcode)}`)
+  const res = await apiFetch(`/catalog/products/by-barcode/${encodeURIComponent(barcode)}`)
   if (res.status === 404) return null
   if (!res.ok) throw new Error(`Error ${res.status}`)
 
@@ -96,11 +105,11 @@ export type NewProductInput = {
 }
 
 export function createProduct(input: NewProductInput): Promise<{ id: number }> {
-  return apiJson('/products', { method: 'POST', body: JSON.stringify(input) })
+  return apiJson('/catalog/products', { method: 'POST', body: JSON.stringify(input) })
 }
 
 export function updateStock(productId: number, stock: number): Promise<{ id: number; currentStock: number }> {
-  return apiJson(`/products/${productId}/stock`, { method: 'PATCH', body: JSON.stringify({ stock }) })
+  return apiJson(`/catalog/products/${productId}/stock`, { method: 'PATCH', body: JSON.stringify({ stock }) })
 }
 
 export type CreateOrderInput = {
@@ -110,7 +119,7 @@ export type CreateOrderInput = {
 }
 
 export function createOrder(providerId: number, input: CreateOrderInput): Promise<{ id: number }> {
-  return apiJson(`/providers/${providerId}/orders`, { method: 'POST', body: JSON.stringify(input) })
+  return apiJson('/orders', { method: 'POST', body: JSON.stringify({ providerId, ...input }) })
 }
 
 export function sendOrder(orderId: number): Promise<{ id: number; status: string }> {
@@ -118,7 +127,10 @@ export function sendOrder(orderId: number): Promise<{ id: number; status: string
 }
 
 export function createProvider(name: string): Promise<Provider> {
-  return apiJson('/providers', { method: 'POST', body: JSON.stringify({ name }) })
+  return apiJson<ProviderDTO>('/catalog/providers', { method: 'POST', body: JSON.stringify({ name }) }).then((p) => ({
+    ...p,
+    pending: false,
+  }))
 }
 
 export type Role = 'owner' | 'employee'

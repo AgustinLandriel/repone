@@ -9,7 +9,7 @@ App de inventario y pedidos a proveedores para comerciantes minoristas: escaneo 
 - `services/catalog-service/` — proveedores y productos.
 - `services/orders-service/` — armado y envío de pedidos (le pide datos a `catalog-service` por HTTP interno).
 
-Arquitectura de microservicios en migración a k3s/EC2 + Terraform + GitHub Actions + ArgoCD — ver plan en `~/.claude/plans/logical-inventing-horizon.md`.
+Arquitectura de microservicios en migración a k3s/EC2 + Terraform + GitHub Actions + ArgoCD. Diagrama, puertos y estado del pipeline de CI: [`docs/architecture.md`](docs/architecture.md).
 
 ## Desarrollo
 

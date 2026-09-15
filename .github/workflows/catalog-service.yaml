@@ -1,12 +1,13 @@
-name: auth-service
+
+name: catalog-service
 
 on:
   push:
     branches: [main]
     paths:
-      - 'services/auth-service/**'
+      - 'services/catalog-service/**'
   workflow_dispatch: {}
-
+    
 # id-token: write es lo que le permite a este workflow pedirle a AWS un token
 # OIDC de corta duración en vez de usar un AWS_ACCESS_KEY_ID guardado en secrets.
 permissions:
@@ -15,7 +16,7 @@ permissions:
 
 env:
   AWS_REGION: us-east-2
-  ECR_REPOSITORY: repone-auth-service
+  ECR_REPOSITORY: repone-catalog-service
 
 jobs:
   build-and-push:
@@ -40,7 +41,7 @@ jobs:
       - name: Build y push de la imagen
         uses: docker/build-push-action@v6
         with:
-          context: ./services/auth-service
+          context: ./services/catalog-service
           push: true
           cache-from: type=gha,scope=auth-service
           cache-to: type=gha,mode=max,scope=auth-service

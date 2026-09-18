@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'services/frontend/**'
+      - 'client/**'
   workflow_dispatch: {}
     
 # id-token: write es lo que le permite a este workflow pedirle a AWS un token
@@ -40,7 +40,7 @@ jobs:
       - name: Build y push de la imagen
         uses: docker/build-push-action@v6
         with:
-          context: ./services/frontend
+          context: ./client
           push: true
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend

@@ -43,8 +43,8 @@ jobs:
         with:
           context: ./services/catalog-service
           push: true
-          cache-from: type=gha,scope=auth-service
-          cache-to: type=gha,mode=max,scope=auth-service
+          cache-from: type=gha,scope=catalog-service
+          cache-to: type=gha,mode=max,scope=catalog-service
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
    

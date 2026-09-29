@@ -11,7 +11,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY package*.json ./
 RUN npm ci --omit=dev
-COPY --from=builder /app/dist ./dist
-RUN mkdir -p /app/data
+COPY --from=builder /app/dist ./dist --chown node:node
+RUN mkdir -p /app/data && chown node:node /app/data
 EXPOSE 3001
+USER node
 CMD ["node", "dist/index.js"]

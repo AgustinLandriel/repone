@@ -68,8 +68,8 @@ Los tres backends quedan mapeados al host hoy sólo para poder debuggearlos con 
 Cada servicio tiene (o va a tener) su propio workflow en `.github/workflows/`, disparado sólo cuando cambia su carpeta, que buildea la imagen y la pushea a ECR usando un rol OIDC (sin AWS keys guardadas en el repo):
 
 - [x] `auth-service.yml`
-- [ ] `catalog-service.yml`
-- [ ] `orders-service.yml`
-- [ ] `frontend.yml`
+- [x] `catalog-service.yml`
+- [x] `orders-service.yml`
+- [x] `frontend.yml`
 
 Terraform (repos ECR, rol OIDC, EC2 con k3s+ArgoCD, DNS en Cloudflare) y los manifiestos de k8s quedan para el final — ver el plan de la migración.

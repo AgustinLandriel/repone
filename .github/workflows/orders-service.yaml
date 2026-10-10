@@ -47,3 +47,23 @@ jobs:
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
    
+  update-gitops:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo gitops
+        uses: actions/checkout@v4
+        with:
+          repository: AgustinLandriel/retail-inventory-gitops
+          token: ${{ secrets.GITOPS_TOKEN }}
+      - name: Actualizar tag de la imagen
+        run: |
+          yq -i '.image.tag = "${{ github.sha }}"' apps/repone-chart/values/orders-service.yaml
+          
+      - name: Commit y push de los cambios
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add apps/repone-chart/values/orders-service.yaml
+          git commit -m "Actualizar tag de la imagen orders service a ${{ github.sha }}"
+          git push    

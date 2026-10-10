@@ -50,6 +50,9 @@ jobs:
   update-gitops:
     needs: build-and-push
     runs-on: ubuntu-latest
+    concurrency:
+      group: gitops-push
+      cancel-in-progress: false
     steps:
       - name: Checkout repo gitops
         uses: actions/checkout@v4

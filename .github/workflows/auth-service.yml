@@ -41,12 +41,31 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./services/auth-service
-          push: true
+          push: false
+          load: true
           cache-from: type=gha,scope=auth-service
           cache-to: type=gha,mode=max,scope=auth-service
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
-   
+
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          format: 'table'
+          exit-code: '0'
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Push de la imagen
+        uses: docker/build-push-action@v6
+        with:
+          context: ./services/auth-service
+          cache-from: type=gha,scope=auth-service
+          push: true
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+
   update-gitops:
     needs: build-and-push
     runs-on: ubuntu-latest
